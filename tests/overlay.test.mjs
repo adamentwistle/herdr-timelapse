@@ -328,3 +328,10 @@ test("small sums", () => {
   assert.equal(exportFacts(bigRun()).length, 5);
   assert.equal(pageColours({ accent: "#112233ff" }).accent, "#112233ff");
 });
+
+test("a done node is dimmed with a solid colour, so the orbit behind it doesn't show through", async () => {
+  const { mix } = await import("../mods/timelapse/view.js");
+  assert.equal(mix("#ffffff", "#000000", 0.55), "#8c8c8c");
+  assert.equal(mix("#4c8dffcc", "#101010", 1), "#4c8dff");
+  assert.equal(mix("transparent", "#101010", 0.5), "transparent");
+});

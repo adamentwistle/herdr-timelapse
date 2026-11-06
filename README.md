@@ -4,7 +4,7 @@ An overlay for Herdr that replays a run of Claude Code agents at high speed, so 
 
 ![Time-lapse](preview.png)
 
-A mod for the [Herdr](https://github.com/ogulcancelik/herdr) desktop app. Built for macOS, and not yet run in a real window there.
+A mod for the [Herdr](https://github.com/ogulcancelik/herdr) desktop app. Built for macOS, and run in a real Herdr 0.1.13 window there at the default zoom of 1.2.
 
 Ask your agent to add it from [herdr.dev/mods](https://herdr.dev/gallery/?type=mods), or point it at this repo. It reads [the recipe](RECIPE.md) and every file first. By hand, copy `mods/timelapse` into `~/.config/herdr-app/mods` and merge `keys.json` into yours. `ctrl-shift-r` opens it.
 

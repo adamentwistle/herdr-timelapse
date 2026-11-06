@@ -241,6 +241,7 @@ test("words", () => {
   assert.equal(tallyText({ working: 2, blocked: 0, waiting: 1, done: 0 }), "2 working, 1 waiting");
   assert.equal(thinText(10, 10), "One spark for each tool call.");
   assert.equal(thinText(1000, 100), "One spark for about 10 tool calls. The counters are the real totals.");
+  assert.equal(thinText(120, 100), "One spark for one or two tool calls. The counters are the real totals.");
   assert.equal(toneOf("Edit"), "write");
   assert.equal(toneOf("something_else"), "tool");
 });
