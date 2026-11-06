@@ -548,6 +548,16 @@ class Exporting(Folder):
         self.assertNotEqual(first["saved"], second["saved"])
         self.assertTrue(second["saved"].endswith("-2.html"))
 
+    def test_a_link_at_the_name_is_left_alone_and_not_followed(self):
+        start, end = self.make()
+        first, _page = self.export(start, end)
+        target = first["saved"] + ".target"
+        nxt = first["saved"][: -len(".html")] + "-2.html"
+        os.symlink(target, nxt)
+        third, _page = self.export(start, end)
+        self.assertTrue(third["saved"].endswith("-3.html"))
+        self.assertFalse(os.path.exists(target))
+
     def test_only_plain_theme_colours_reach_the_page(self):
         colours = helper.colours_of(json.dumps({"accent": "#112233", "done": "#11223344", "muted": "red;}", "other": "#000000"}))
         self.assertEqual(colours, {"accent": "#112233", "done": "#11223344"})

@@ -24,6 +24,14 @@ export const tones = (t) => ({
   write: t.ansi3, shell: t.accent, read: t.ansi6, agent: t.foreground, tool: t.muted,
 });
 const tint = (colour, alpha) => `${colour.slice(0, 7)}${alpha}`;
+// `colour` laid over `under` at `share`, as one solid colour. A done node is dimmed this way rather than with opacity, so
+// the orbit behind it doesn't show through.
+export function mix(colour, under, share) {
+  const rgb = (c) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+  if (!/^#[0-9a-f]{6}/i.test(colour ?? "") || !/^#[0-9a-f]{6}/i.test(under ?? "")) return colour;
+  const [a, b] = [rgb(colour), rgb(under)];
+  return `#${a.map((v, i) => Math.round(v * share + b[i] * (1 - share)).toString(16).padStart(2, "0")).join("")}`;
+}
 const mono = () => settings().font_family ?? "JetBrains Mono";
 const painted = (path, colour, width, height) => window.paint_path(path, colour).absolute().top(0).left(0).w(width).h(height);
 
@@ -108,10 +116,10 @@ function hub(view, scene, geo, tone, t) {
 }
 
 function node(n, tone, t) {
-  const fill = tone[n.state], at = (size) => ({ left: n.x - size / 2, top: n.y - size / 2 });
+  const fill = n.state === "done" ? mix(tone.done, t.canvas, 0.55) : tone[n.state], at = (size) => ({ left: n.x - size / 2, top: n.y - size / 2 });
   const blocked = n.state === "blocked", box = at(n.size), ring = at(n.size + 12);
   const dot = div().id(`node-${n.i}`).absolute().left(box.left).top(box.top).size(n.size).flex().items_center().justify_center().rounded_full()
-    .bg(n.more ? t.canvas : fill).border(1.5).border_color(n.more ? t.dim : fill).opacity(n.state === "done" ? 0.55 * n.opacity : n.opacity)
+    .bg(n.more ? t.canvas : fill).border(1.5).border_color(n.more ? t.dim : fill).opacity(n.opacity)
     .transition("opacity", STEP).transition("width", STEP).transition("height", STEP)
     .when(blocked, (e) => e.text_color(t.background).text_size(Math.round(n.size * 0.62)).font_bold().child("!"))
     .when(n.more > 0, (e) => e.text_color(t.muted).text_size(9).font_semibold().child(`+${n.more}`));

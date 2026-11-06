@@ -387,7 +387,7 @@ def page_of(run, colours):
 def free_name(folder, stem):
     path = os.path.join(folder, stem + ".html")
     count = 1
-    while os.path.exists(path):
+    while os.path.lexists(path):
         count += 1
         path = os.path.join(folder, "%s-%d.html" % (stem, count))
     return path
@@ -401,9 +401,19 @@ def export(args):
     os.makedirs(args.out, exist_ok=True)
     day = time.strftime("%Y-%m-%d", time.gmtime((run["start"] / 1000) + run["offsetMin"] * 60))
     name = re.sub(r"[^A-Za-z0-9._-]+", "-", run["folder"]).strip("-.") or "run"
-    path = free_name(args.out, "time-lapse-%s-%s" % (name, "demo" if args.demo else day))
-    with open(path, "w", encoding="utf-8", newline="\n") as f:
-        f.write(page_of(run, colours_of(args.colours)))
+    page = page_of(run, colours_of(args.colours))
+    # "x" makes the file or fails, so a file that turns up between the look and the write is never replaced, and a link
+    # left at that name is never followed.
+    for _ in range(100):
+        path = free_name(args.out, "time-lapse-%s-%s" % (name, "demo" if args.demo else day))
+        try:
+            with open(path, "x", encoding="utf-8", newline="\n") as f:
+                f.write(page)
+            break
+        except FileExistsError:
+            continue
+    else:
+        return {"partial": False, "error": "Couldn't save: every name up to -100 is taken."}
     return {"partial": False, "saved": path, "bytes": os.path.getsize(path)}
 
 

@@ -373,6 +373,7 @@ export const idleText = (gap) => `${spanText(gap.to - gap.from)} with no tool ca
 // What a spark is worth, so a thinned replay says so.
 export function thinText(total, drawn) {
   if (!drawn || total <= drawn) return "One spark for each tool call.";
+  if (Math.round(total / drawn) < 2) return "One spark for one or two tool calls. The counters are the real totals.";
   return `One spark for about ${countText(total / drawn)} tool calls. The counters are the real totals.`;
 }
 
