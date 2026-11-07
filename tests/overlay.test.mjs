@@ -193,7 +193,8 @@ test("the list shows runs by folder and time, and opens one", async () => {
   assert.equal(view.playing, false);
   const text = tree().text();
   assert.match(text, /tidepool/);
-  assert.match(text, /6 agents/);
+  assert.match(text, /Agents/);
+  assert.match(text, /Tool calls/);
   assert.match(text, /1 transcript couldn't be read/);
   await press(tree, `run-tidepool-${START - 72 * HOUR}`, cx);
   await cx.settled();
@@ -334,4 +335,15 @@ test("a done node is dimmed with a solid colour, so the orbit behind it doesn't 
   assert.equal(mix("#ffffff", "#000000", 0.55), "#8c8c8c");
   assert.equal(mix("#4c8dffcc", "#101010", 1), "#4c8dff");
   assert.equal(mix("transparent", "#101010", 0.5), "transparent");
+});
+
+test("the notes on sparks and times sit in a card behind the i, not under the stats", async () => {
+  script(...oneRun());
+  const { tree } = await open();
+  const card = tree().find("info-card");
+  assert.ok(card, "there's an info card");
+  assert.doesNotMatch(tree().text(), /Times come from transcript timestamps/);
+  const content = card.calls.find(([name]) => name === "content")[1][0];
+  assert.match(content.text(), /Times come from transcript timestamps/);
+  assert.match(content.text(), /spark/);
 });

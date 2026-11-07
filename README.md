@@ -1,6 +1,6 @@
 # Time-lapse
 
-An overlay for Herdr that replays a run of Claude Code agents at high speed, so you can watch what happened overnight in 30 seconds. Agents appear on an orbit as they start, sparks fire on each tool call, and a clock and counters run along.
+An overlay for Herdr that replays a run of Claude Code agents at high speed, so you can watch what happened overnight in 30 seconds. Agents appear on an orbit as they start, and it shrinks them to fit so none is hidden. Sparks fire on each tool call, and a clock and counters run along. `Sessions` lists past sessions with their length, agents and tool calls, so you can pick one.
 
 ![Time-lapse](preview.png)
 
