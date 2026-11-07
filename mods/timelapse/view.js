@@ -3,7 +3,7 @@
 // A render happens ten times a second while the replay plays, against Herdr's 55 ms limit. So the sky, the timeline's bars
 // and the lines on the orbit are paths kept between renders, and everything that moves between renders moves natively.
 import { PathBuilder, div } from "gpui-kit";
-import { h_flex, v_flex } from "gpui-base";
+import { HoverCard, h_flex, v_flex } from "gpui-base";
 import { settings } from "herdr";
 import { TICK_MS, exportFacts, exportLeftOut, exportWarning, leftOutText, progressText } from "./logic.js";
 import { runLabel, whenText } from "./runs.js";
@@ -65,7 +65,7 @@ function backdrop(view, geo, t) {
 
 // The spokes, the ring round the middle and the arcs for subagents. They change only when an agent appears or changes
 // state, so the paths are kept between those, one pair for each state showing.
-function lines(view, scene, geo, tone) {
+function lines(view, scene, geo, tone, t) {
   const key = `${geo.size}|${scene.nodes.map((n) => `${n.i}${n.state}${n.size}${n.kids.join("")}`).join(",")}`;
   const layers = kept(view, "lines", key, () => {
     const byState = new Map();
@@ -86,13 +86,22 @@ function lines(view, scene, geo, tone) {
         kid.used.arcs = true;
       });
     }
-    return [...byState].map(([state, p]) => ({ state, spokes: p.used.spokes ? p.spokes.build() : null, arcs: p.used.arcs ? p.arcs.build() : null }));
+    // A dense map draws its nodes here too, one filled path for each state, so a run of any size costs the same to render.
+    const dots = new Map();
+    if (geo.dense) for (const node of scene.nodes) {
+      if (!dots.has(node.state)) dots.set(node.state, PathBuilder.fill());
+      dots.get(node.state).add_polygon(arcPoints(node.x, node.y, node.size / 2, 0, 2 * Math.PI), true);
+    }
+    return [...byState].map(([state, p]) => ({
+      state, spokes: p.used.spokes ? p.spokes.build() : null, arcs: p.used.arcs ? p.arcs.build() : null, dots: dots.has(state) ? dots.get(state).build() : null,
+    }));
   });
   const out = [];
   for (const layer of layers) {
     if (layer.spokes) out.push(painted(layer.spokes, tint(tone[layer.state], "77"), geo.size, geo.size));
     if (layer.arcs) out.push(painted(layer.arcs, tone[layer.state], geo.size, geo.size));
   }
+  for (const layer of layers) if (layer.dots) out.push(painted(layer.dots, layer.state === "done" ? mix(tone.done, t.canvas, 0.55) : tone[layer.state], geo.size, geo.size));
   return out;
 }
 
@@ -119,10 +128,9 @@ function node(n, tone, t) {
   const fill = n.state === "done" ? mix(tone.done, t.canvas, 0.55) : tone[n.state], at = (size) => ({ left: n.x - size / 2, top: n.y - size / 2 });
   const blocked = n.state === "blocked", box = at(n.size), ring = at(n.size + 12);
   const dot = div().id(`node-${n.i}`).absolute().left(box.left).top(box.top).size(n.size).flex().items_center().justify_center().rounded_full()
-    .bg(n.more ? t.canvas : fill).border(1.5).border_color(n.more ? t.dim : fill).opacity(n.opacity)
+    .bg(fill).border(1.5).border_color(fill).opacity(n.opacity)
     .transition("opacity", STEP).transition("width", STEP).transition("height", STEP)
-    .when(blocked, (e) => e.text_color(t.background).text_size(Math.round(n.size * 0.62)).font_bold().child("!"))
-    .when(n.more > 0, (e) => e.text_color(t.muted).text_size(9).font_semibold().child(`+${n.more}`));
+    .when(blocked, (e) => e.text_color(t.background).text_size(Math.round(n.size * 0.62)).font_bold().child("!"));
   if (!blocked) return [dot];
   return [div().absolute().left(ring.left).top(ring.top).size(n.size + 12).rounded_full().bg(fill).loop("opacity", { from: 0.06, to: 0.6, period: 800 }), dot];
 }
@@ -130,7 +138,7 @@ function node(n, tone, t) {
 function label(n, geo, tone, t) {
   const at = labelSpot(n, n.size, geo), line = (top, text, colour, weight) => div().absolute().left(at.left).top(top).w(at.width).truncate().text_center().text_size(11).line_height(1.2)
     .text_color(colour).when(weight, (e) => e.font_medium()).child(text);
-  return n.more ? [line(at.top, n.name, t.muted, false)] : [line(at.top, n.name, t.foreground, true), line(at.top + 14, stateWord(n.state), tone[n.state], false)];
+  return [line(at.top, n.name, t.foreground, true), line(at.top + 14, stateWord(n.state), tone[n.state], false)];
 }
 
 function idleChip(scene, geo, t) {
@@ -141,11 +149,10 @@ function idleChip(scene, geo, t) {
 function mapView(view, scene, geo, tone, t) {
   return div().id("map").relative().w(geo.size).h(geo.size).flex_none()
     .children(backdrop(view, geo, t))
-    .children(lines(view, scene, geo, tone))
+    .children(lines(view, scene, geo, tone, t))
     .children(scene.sparks.map((s) => spark(s, tone)))
     .children(hub(view, scene, geo, tone, t))
-    .children(scene.nodes.flatMap((n) => node(n, tone, t)))
-    .children(scene.nodes.flatMap((n) => label(n, geo, tone, t)))
+    .when(!geo.dense, (e) => e.children(scene.nodes.flatMap((n) => node(n, tone, t))).children(scene.nodes.flatMap((n) => label(n, geo, tone, t))))
     .when(Boolean(scene.gap), (e) => e.child(idleChip(scene, geo, t)));
 }
 
@@ -171,9 +178,20 @@ function side(view, scene, t) {
     .child(div().flex_none().text_size(13).text_color(t.foreground).child(tallyText(scene.tally) || "No agents yet"))
     .child(latestLine(scene, t))
     .child(div().flex_1())
-    .child(div().flex_none().text_size(11).line_height(1.35).text_color(t.dim).child(thinText(data.totals.calls, view.made.drawn[durationKey(view.duration)].length)))
-    .child(div().flex_none().text_size(11).line_height(1.35).text_color(t.dim).child("Times come from transcript timestamps. Blocked and waiting are worked out from them."));
+    .child(info(thinText(data.totals.calls, view.made.drawn[durationKey(view.duration)].length), t));
 }
+
+// What a spark is worth and where the times come from, in a small card that opens while the pointer rests on the "i".
+function info(thin, t) {
+  const line = (text) => div().text_size(12).line_height(1.4).text_color(t.foreground).child(text);
+  const icon = h_flex().id("info").size(20).flex_none().items_center().justify_center().rounded_full().border(1).border_color(t.border)
+    .text_size(11).font_semibold().text_color(t.muted).cursor_pointer().hover((s) => s.bg(t.hover)).child("i");
+  return h_flex().flex_none().child(HoverCard.new("info-card").open_delay(150).close_delay(200).anchor("bottom_left").trigger(icon)
+    .content(v_flex().w(280).gap(6).p(12).rounded(8).bg(t.popover).border(1).border_color(t.border)
+      .child(line(thin)).child(line(INFO_TIMES))));
+}
+
+export const INFO_TIMES = "Times come from transcript timestamps. Blocked and waiting are worked out from them.";
 
 function barsPath(bars, width, top) {
   const path = PathBuilder.fill(), step = width / bars.length;
@@ -248,7 +266,7 @@ function header(view, t) {
     .child(div().flex_none().text_size(13).font_semibold().text_color(t.muted).child("Time-lapse"))
     .when(view.demo, (e) => e.child(div().flex_none().px(6).py(1).rounded(4).bg(t.raised).text_size(11).text_color(t.dim).child("Demo data")))
     .child(div().flex_1().min_w(0).truncate().text_size(13).font_medium().child(picked))
-    .child(button("runs", view.page === "runs" ? "Back" : "Runs", false, Boolean(view.runs?.length), t, (_e, cx) => view.showRuns(cx)))
+    .child(button("runs", view.page === "runs" ? "Back" : "Sessions", false, Boolean(view.runs?.length), t, (_e, cx) => view.showRuns(cx)))
     .child(button("export", "Export", false, Boolean(view.made) && view.page === "replay", t, (_e, cx) => view.askExport(cx)));
 }
 
@@ -259,13 +277,22 @@ function runRow(view, run, t) {
     .child(div().flex_1().min_w(0).truncate().text_size(13).font_medium().child(run.folder))
     .child(div().w(120).flex_none().text_size(12).text_color(t.muted).child(whenText(run.from, view.now, view.offsetMin)))
     .child(cell(spanText(run.to - run.from), 70))
-    .child(cell(`${run.agents} ${run.agents === 1 ? "agent" : "agents"}`, 80))
-    .child(cell(`${countText(run.calls)} calls`, 100));
+    .child(cell(String(run.agents), 80))
+    .child(cell(countText(run.calls), 100));
+}
+
+function columns(t) {
+  const cell = (text, width) => div().w(width).flex_none().text_right().text_size(11).text_color(t.dim).child(text);
+  return h_flex().h(20).px(12).gap(12).flex_none().items_center()
+    .child(div().flex_1().min_w(0).text_size(11).text_color(t.dim).child("Folder"))
+    .child(div().w(120).flex_none().text_size(11).text_color(t.dim).child("Started"))
+    .child(cell("Length", 70)).child(cell("Agents", 80)).child(cell("Tool calls", 100));
 }
 
 function runsPage(view, t) {
   const left = leftOutText(view.leftOut, view.leftOff);
-  return v_flex().flex_1().min_h(0).gap(8)
+  return v_flex().flex_1().min_h(0).gap(4)
+    .child(columns(t))
     .child(v_flex().id("run-list").flex_1().min_h(0).gap(2).overflow_y_scrollbar().children(view.runs.map((run) => runRow(view, run, t))))
     .when(Boolean(left), (e) => e.child(div().flex_none().text_size(12).text_color(t.muted).child(left)));
 }
@@ -297,7 +324,7 @@ const problem = (view, t) => centred(div().max_w(520).text_center().text_size(13
 const empty = (t) => centred(div().text_size(13).text_color(t.muted).child("No runs with tool calls yet."));
 
 function replay(view, width, height, tone, t) {
-  const size = Math.max(280, Math.min(height - CHROME_H, width - SIDE_MIN - 20)), geo = geometry(Math.floor(size));
+  const size = Math.max(280, Math.min(height - CHROME_H, width - SIDE_MIN - 20)), geo = geometry(Math.floor(size), view.made.place.slots.length);
   const scene = sceneAt(view.made, view.fraction, view.duration, geo);
   return [
     h_flex().flex_1().min_h(0).gap(20).items_start()

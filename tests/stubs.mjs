@@ -59,7 +59,8 @@ export const div = () => element("div");
 export const PathBuilder = PathBuilderStub;`,
   "gpui-base": `import { element } from ${JSON.stringify(import.meta.url)};
 export const v_flex = () => element("v_flex");
-export const h_flex = () => element("h_flex");`,
+export const h_flex = () => element("h_flex");
+export const HoverCard = { new: (id) => element("hover_card").id(id) };`,
   herdr: `import { world, theme as colours } from ${JSON.stringify(import.meta.url)};
 export const appHome = () => "/h/.config/herdr-app";
 export const home = () => "/h";

@@ -10,8 +10,7 @@ export const SPARK_RATE = 8;
 export const SPARKS_PER_SLOT = 2;
 export const FLIGHT_MS = 700;
 export const MAX_SPARKS = 8;
-export const MAX_SLOTS = 12;
-export const MAX_KIDS = 8;
+export const LABELLED = 12;
 export const BAR_COUNT = 160;
 export const FADE_IN_MS = 300;
 
@@ -153,28 +152,20 @@ export function stateAt(agent, t) {
 }
 
 // What sits where. One session with subagents is the middle, and they go on the orbit. Otherwise the sessions go on the
-// orbit, with their subagents as arcs round them. Past MAX_SLOTS the busiest keep their places and the last says "+N".
-export function placeAgents(agents, max = MAX_SLOTS) {
+// orbit, with their subagents as arcs round them. Everyone gets a place: the map shrinks its nodes to fit, see `geometry`.
+export function placeAgents(agents) {
   const sessions = [], kidsOf = new Map();
   agents.forEach((agent, i) => {
     if (agent.parent < 0) sessions.push(i);
     else { if (!kidsOf.has(agent.parent)) kidsOf.set(agent.parent, []); kidsOf.get(agent.parent).push(i); }
   });
   const lead = sessions.length === 1 && kidsOf.has(sessions[0]) ? sessions[0] : -1;
-  let orbit = lead >= 0 ? kidsOf.get(lead) : sessions, folded = [];
-  if (orbit.length > max) {
-    const busiest = [...orbit].sort((a, b) => agents[b].calls - agents[a].calls), keep = new Set(busiest.slice(0, max - 1));
-    folded = orbit.filter((i) => !keep.has(i));
-    orbit = orbit.filter((i) => keep.has(i));
-  }
-  const slots = orbit.map((agent) => ({ agent, kids: lead >= 0 ? [] : (kidsOf.get(agent) ?? []).slice(0, MAX_KIDS), more: 0 }));
-  if (folded.length) slots.push({ agent: -1, kids: [], more: folded.length, folded });
+  const orbit = lead >= 0 ? kidsOf.get(lead) : sessions;
+  const slots = orbit.map((agent) => ({ agent, kids: lead >= 0 ? [] : (kidsOf.get(agent) ?? []) }));
   const slotOf = new Array(agents.length).fill(-1);
   slots.forEach((slot, i) => {
-    for (const agent of slot.agent >= 0 ? [slot.agent] : slot.folded) {
-      slotOf[agent] = i;
-      if (lead < 0) for (const kid of kidsOf.get(agent) ?? []) slotOf[kid] = i;
-    }
+    slotOf[slot.agent] = i;
+    if (lead < 0) for (const kid of slot.kids) slotOf[kid] = i;
   });
   return { lead, slots, slotOf };
 }
@@ -202,11 +193,15 @@ export function prepare(data) {
 const LABEL = 118;
 const HUB_SHARE = 0.25;
 const EDGE = 58;
+const DENSE_EDGE = 20;
 const TOP = -Math.PI / 2;
 
-export function geometry(size) {
-  const centre = size / 2;
-  return { size, centre, orbit: centre - EDGE, hub: Math.max(56, Math.round(size * HUB_SHARE)) };
+// The map for `count` places. Up to LABELLED places each node has a label. Past that the map is dense: no labels, the
+// orbit moves out to the edge, and nodes shrink so every agent fits on the circle without touching the next.
+export function geometry(size, count = 1) {
+  const centre = size / 2, dense = count > LABELLED, hub = Math.max(56, Math.round(size * HUB_SHARE));
+  const orbit = centre - (dense ? DENSE_EDGE : EDGE), room = (2 * Math.PI * orbit) / Math.max(1, count);
+  return { size, centre, orbit, hub, dense, nodeMax: Math.max(4, Math.min(30, Math.floor(room * 0.7))) };
 }
 
 // Where place `i` of `count` sits. The first is at twelve o'clock, then clockwise.
@@ -215,8 +210,11 @@ export function slotPoint(i, count, geo) {
   return { x: geo.centre + geo.orbit * Math.cos(angle), y: geo.centre + geo.orbit * Math.sin(angle), angle };
 }
 
-// A node's width in px. It grows with the calls it has made so far.
-export const nodeSize = (calls) => Math.round(Math.max(18, Math.min(30, 18 + Math.sqrt(Math.max(0, calls)) * 0.7)));
+// A node's width in px. It grows with the calls it has made so far, up to `max`, which a crowded orbit makes smaller.
+export const nodeSize = (calls, max = 30) => {
+  const top = Math.min(30, max), low = Math.min(18, top);
+  return Math.round(Math.max(low, Math.min(top, 18 + Math.sqrt(Math.max(0, calls)) * 0.7)));
+};
 
 // A label sits outside its node: above one in the top half, below one in the bottom half, never off the map.
 export function labelSpot(point, node, geo) {
@@ -301,19 +299,12 @@ export function sceneAt(made, fraction, durationMs, geo) {
   });
   const count = place.slots.length, shown = [];
   const nodes = place.slots.map((slot, i) => {
-    const point = slotPoint(i, count, geo);
-    if (slot.agent < 0) {
-      const inside = slot.folded.filter((agent) => states[agent]);
-      if (!inside.length) return null;
-      shown.push(i);
-      return { i, ...point, more: slot.more, state: "waiting", size: 18, opacity: 1, name: `${slot.more} more`, kids: [] };
-    }
     const agent = data.agents[slot.agent], state = states[slot.agent];
     if (!state) return null;
     shown.push(i);
-    const sinceStart = (fraction - fractionAt(timeline, agent.start)) * durationMs;
+    const point = slotPoint(i, count, geo), sinceStart = (fraction - fractionAt(timeline, agent.start)) * durationMs;
     return {
-      i, ...point, more: 0, state, name: agent.name, size: nodeSize(countsAt(made.perAgent[slot.agent], t).calls), opacity: Math.max(0.2, Math.min(1, sinceStart / FADE_IN_MS)),
+      i, ...point, state, name: agent.name, size: nodeSize(countsAt(made.perAgent[slot.agent], t).calls, geo.nodeMax ?? 30), opacity: Math.max(0.2, Math.min(1, sinceStart / FADE_IN_MS)),
       kids: slot.kids.map((kid) => states[kid]).filter(Boolean),
     };
   }).filter(Boolean);

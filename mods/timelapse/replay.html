@@ -139,16 +139,16 @@ function drawMap(scene, geo, pen) {
   if (scene.leadState) { pen.fillStyle = TONE[scene.leadState]; pen.fillText(stateWord(scene.leadState), geo.centre, geo.centre + geo.hub * 0.2 + 14); }
   for (const node of scene.nodes) {
     pen.globalAlpha = node.state === "done" ? 0.55 * node.opacity : node.opacity;
-    pen.fillStyle = node.more ? C.canvas : TONE[node.state];
+    pen.fillStyle = TONE[node.state];
     pen.beginPath(); pen.arc(node.x, node.y, node.size / 2, 0, 2 * Math.PI); pen.fill();
     pen.globalAlpha = 1;
-    if (node.more) { pen.fillStyle = C.muted; pen.font = "600 9px system-ui, sans-serif"; pen.fillText(`+${node.more}`, node.x, node.y); }
+    if (geo.dense) continue;
     if (node.state === "blocked") { pen.fillStyle = C.background; pen.font = `700 ${Math.round(node.size * 0.62)}px system-ui, sans-serif`; pen.fillText("!", node.x, node.y); }
     const at = labelSpot(node, node.size, geo), middle = at.left + at.width / 2;
     pen.textBaseline = "top";
-    pen.fillStyle = node.more ? C.muted : C.foreground; pen.font = "500 11px system-ui, sans-serif";
+    pen.fillStyle = C.foreground; pen.font = "500 11px system-ui, sans-serif";
     pen.fillText(node.name, middle, at.top, at.width);
-    if (!node.more) { pen.fillStyle = TONE[node.state]; pen.font = "11px system-ui, sans-serif"; pen.fillText(stateWord(node.state), middle, at.top + 14, at.width); }
+    pen.fillStyle = TONE[node.state]; pen.font = "11px system-ui, sans-serif"; pen.fillText(stateWord(node.state), middle, at.top + 14, at.width);
     pen.textBaseline = "middle";
   }
   if (scene.gap) {
@@ -188,7 +188,7 @@ function drawStrip() {
 }
 
 function draw() {
-  const { pen, width } = fit(map), geo = geometry(width), scene = sceneAt(made, fraction, duration, geo), moment = RUN.start + scene.t;
+  const { pen, width } = fit(map), geo = geometry(width, made.place.slots.length), scene = sceneAt(made, fraction, duration, geo), moment = RUN.start + scene.t;
   drawMap(scene, geo, pen);
   drawStrip();
   $("clock").textContent = clockText(moment, RUN.offsetMin);

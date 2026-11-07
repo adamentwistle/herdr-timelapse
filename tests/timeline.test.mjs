@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  FLIGHT_MS, MAX_SLOTS, MAX_SPARKS, SPARKS_PER_SLOT, SPARK_RATE, activityBars, clipText, clockText, compress, countText, countsAt, dayText, fractionAt, gapAt, gapLabels,
+  FLIGHT_MS, LABELLED, MAX_SPARKS, SPARKS_PER_SLOT, SPARK_RATE, activityBars, clipText, clockText, compress, countText, countsAt, dayText, fractionAt, gapAt, gapLabels,
   geometry, idleText, indexByAgent, indexCounts, placeAgents, prepare, prepareSteps, pressShare, sceneAt, spanText, sparkRoute, sparksAt, stateAt, tallyText, thinForDrawing, thinText, timeAt, toneOf,
 } from "../mods/timelapse/timeline.js";
 
@@ -155,14 +155,32 @@ test("a lone session sits on the orbit, not alone in the middle", () => {
   assert.equal(place.slots.length, 1);
 });
 
-test("past the room on the orbit the busiest stay and the rest fold into one place", () => {
+test("every agent gets a place on the orbit, however many there are", () => {
   const place = placeAgents(agentsOf(...Array(30).fill(-1)));
-  assert.equal(place.slots.length, MAX_SLOTS);
-  const last = place.slots.at(-1);
-  assert.equal(last.agent, -1);
-  assert.equal(last.more, 30 - (MAX_SLOTS - 1));
-  assert.ok(place.slots.slice(0, -1).every((s) => s.agent >= 30 - (MAX_SLOTS - 1)));
-  assert.ok(place.slotOf.every((slot) => slot >= 0));
+  assert.equal(place.slots.length, 30);
+  assert.deepEqual(place.slotOf, [...Array(30).keys()]);
+  const kids = placeAgents(agentsOf(-1, -1, ...Array(20).fill(0)));
+  assert.equal(kids.slots[0].kids.length, 20);
+});
+
+test("a crowded orbit drops labels and shrinks nodes so neighbours don't touch", () => {
+  assert.equal(geometry(480, LABELLED).dense, false);
+  for (const count of [13, 40, 100]) {
+    for (const size of [280, 500]) {
+      const geo = geometry(size, count), room = (2 * Math.PI * geo.orbit) / count;
+      assert.equal(geo.dense, true);
+      assert.ok(geo.orbit + geo.nodeMax / 2 <= size / 2, "nodes stay on the map");
+      if (count <= 100 && size >= 500) assert.ok(geo.nodeMax < room, `${count} at ${size}: ${geo.nodeMax} in ${room}`);
+    }
+  }
+});
+
+test("every agent of a big run is drawn", () => {
+  const agents = Array.from({ length: 40 }, (_, i) => ({ name: `a${i}`, parent: -1, calls: 10, start: 0, end: 1000, marks: [] }));
+  const made = prepare({ start: 0, span: 1000, offsetMin: 0, agents, tools: ["Read"], files: [], events: agents.map((_, i) => [i, 10, 0, -1, 10, 0]), totals: { calls: 400, files: 0 } });
+  const scene = sceneAt(made, 0.99, 30000, geometry(480, made.place.slots.length));
+  assert.equal(scene.nodes.length, 40);
+  assert.ok(scene.nodes.every((n) => n.size <= geometry(480, 40).nodeMax));
 });
 
 test("sparks in the air depend only on the place in the clip", () => {
